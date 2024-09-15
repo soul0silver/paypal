@@ -4,16 +4,19 @@ import com.paypal.api.payments.Links;
 import com.paypal.api.payments.Payment;
 import com.paypal.base.rest.PayPalRESTException;
 import com.paypal.dto.Order;
+import com.paypal.dto.Ticket;
 import com.paypal.service.EventRepository;
 import com.paypal.service.PaypalService;
 import com.paypal.service.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.math.BigDecimal;
+
 @Controller
 public class PaypalController {
     @Autowired
@@ -26,10 +29,10 @@ public class PaypalController {
     public static final String SUCCESS_URL = "success";
     public static final String CANCEL_URL = "cancel";
 
-
+    @Transactional
     @GetMapping("/pay/{id}")
     public String home(@PathVariable("id") String id) {
-        var order = ticketRepository.findById(Long.parseLong(id)).map(t->Order.builder()
+        var order = ticketRepository.findById(Long.parseLong(id)).map(t -> Order.builder()
                 .currency("USD")
                 .price(eventRepository.getReferenceById(t.getEid()).getPrice().multiply(BigDecimal.valueOf(t.getQuantity())).doubleValue())
                 .method("PAYPAL")
@@ -43,8 +46,8 @@ public class PaypalController {
                     order.getMethod(),
                     order.getIntent(),
                     order.getDescription(),
-                    "http://localhost:8080/" + CANCEL_URL+"?id="+id,
-                    "http://localhost:8080/" + SUCCESS_URL+"?id="+id
+                    "http://localhost:8080/" + CANCEL_URL + "?id=" + id,
+                    "http://localhost:8080/" + SUCCESS_URL + "?id=" + id
             );
 
             for (Links link : payment.getLinks()) {
@@ -59,13 +62,15 @@ public class PaypalController {
         return "redirect:/";
     }
 
-//
+    //
     @GetMapping(value = CANCEL_URL)
     public String cancelView(@RequestParam("id") String id) {
         ticketRepository.deleteById(Long.parseLong(id));
         System.out.println(id);
-        return "cancelView.html";}
+        return "cancelView.html";
+    }
 
+    @Transactional
     @GetMapping(value = SUCCESS_URL)
     public String successPay(
             @RequestParam("paymentId") String paymentId,
@@ -76,7 +81,10 @@ public class PaypalController {
             Payment payment = paypalService.executePayment(paymentId, PayerId);
             System.out.println(payment.toJSON());
             if (payment.getState().equals("approved")) {
-                return "success";
+                Ticket ticket = ticketRepository.getReferenceById(Long.parseLong(id));
+                ticket.setPaid(true);
+                ticketRepository.save(ticket);
+                return "success.html";
             }
         } catch (PayPalRESTException e) {
             ticketRepository.deleteById(Long.parseLong(id));

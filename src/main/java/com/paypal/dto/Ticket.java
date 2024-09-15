@@ -21,4 +21,5 @@ public class Ticket {
     @Column(name = "phone")
     private String phoneNumber;
     private Integer quantity;
+    private boolean paid;
 }
